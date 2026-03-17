@@ -1,12 +1,12 @@
 {
   "name": "@cedros/trade-react",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Solana trading UI components — swap, transfer, trading, portfolio",
   "type": "module",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
-  "style": "dist/trade-react.css",
+  "style": "dist/style.css",
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -18,7 +18,7 @@
       "require": "./dist/admin-only.cjs",
       "types": "./dist/admin-only.d.ts"
     },
-    "./style.css": "./dist/trade-react.css"
+    "./style.css": "./dist/style.css"
   },
   "files": [
     "dist"
