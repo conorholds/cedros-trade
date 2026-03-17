@@ -102,6 +102,27 @@ impl TradeRouter {
             // WebSocket + Metrics
             .route("/ws/prices", get(crate::ws_prices::ws_prices_handler))
             .route("/metrics", get(crate::metrics::metrics_handler))
+            // AI Discovery (no auth, public)
+            .route("/ai.txt", get(crate::ai_discovery::ai_txt))
+            .route("/llms.txt", get(crate::ai_discovery::llms_txt))
+            .route("/llms-full.txt", get(crate::ai_discovery::llms_full_txt))
+            .route("/llms-admin.txt", get(crate::ai_discovery::llms_admin_txt))
+            .route("/agent.md", get(crate::ai_discovery::agent_md))
+            .route("/skill.md", get(crate::ai_discovery::skill_md))
+            .route("/skill.json", get(crate::ai_discovery::skill_json))
+            .route("/heartbeat.md", get(crate::ai_discovery::heartbeat_md))
+            .route("/heartbeat.json", get(crate::ai_discovery::heartbeat_json))
+            .route("/skills/swap.md", get(crate::ai_discovery::skill_swap_md))
+            .route("/skills/transfers.md", get(crate::ai_discovery::skill_transfers_md))
+            .route("/skills/orders.md", get(crate::ai_discovery::skill_orders_md))
+            .route("/skills/positions.md", get(crate::ai_discovery::skill_positions_md))
+            .route("/skills/orderbook.md", get(crate::ai_discovery::skill_orderbook_md))
+            .route("/skills/admin.md", get(crate::ai_discovery::skill_admin_md))
+            .route("/.well-known/ai-discovery.json", get(crate::ai_discovery::ai_discovery_index))
+            .route("/.well-known/ai-plugin.json", get(crate::ai_discovery::ai_plugin_json))
+            .route("/.well-known/agent.json", get(crate::ai_discovery::agent_json))
+            .route("/.well-known/mcp", get(crate::ai_discovery::mcp_discovery))
+            .route("/openapi.json", get(crate::ai_discovery::openapi_json))
             .with_state(self.service.clone());
 
         if let Some(auth_mode) = self.admin_auth {

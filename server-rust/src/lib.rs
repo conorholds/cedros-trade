@@ -1,5 +1,6 @@
 pub mod action_queue;
 pub mod admin;
+pub mod ai_discovery;
 pub mod config;
 pub mod embedded_wallet;
 pub mod error;

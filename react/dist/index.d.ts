@@ -108,6 +108,30 @@ export declare function LoadingSpinner({ className }: {
     className?: string;
 }): JSX_2.Element;
 
+export declare interface MonitoredOrder {
+    id: string;
+    orderType: string;
+    maker: string;
+    walletId: string;
+    inputMint: string;
+    outputMint: string;
+    inAmount: string;
+    status: string;
+    currentTrigger?: string;
+    peakPrice?: string;
+    createdAt: string;
+    executedAt?: string;
+    txSignature?: string;
+    fillPrice?: string;
+}
+
+export declare function MonitoredOrdersList({ walletAddress, className }: MonitoredOrdersListProps): JSX_2.Element;
+
+export declare interface MonitoredOrdersListProps {
+    walletAddress: string;
+    className?: string;
+}
+
 export declare interface OpenOrder {
     orderId: string;
     inputMint: string;
@@ -159,6 +183,25 @@ export declare interface PendingAction {
     txSignature?: string;
 }
 
+export declare interface PnlHolding {
+    mint: string;
+    symbol?: string;
+    uiBalance: string;
+    currentPrice: string;
+    currentValue: string;
+    entryPrice?: string;
+    costBasis?: string;
+    unrealizedPnl?: string;
+    unrealizedPnlPercent?: string;
+}
+
+export declare function PnlTable({ walletAddress, className }: PnlTableProps): JSX_2.Element;
+
+export declare interface PnlTableProps {
+    walletAddress: string;
+    className?: string;
+}
+
 export declare function PortfolioPage({ walletAddress, className }: PortfolioPageProps): JSX_2.Element;
 
 export declare interface PortfolioPageProps {
@@ -193,6 +236,17 @@ export declare interface PriceSnapshot {
     marketCap?: number;
     volume24h?: number;
     priceChange24hPct?: number;
+}
+
+export declare function ProviderComparison({ inputMint, outputMint, amount, outputDecimals, onSelect, className }: ProviderComparisonProps): JSX_2.Element | null;
+
+export declare interface ProviderComparisonProps {
+    inputMint: string;
+    outputMint: string;
+    amount: string;
+    outputDecimals?: number;
+    onSelect?: (quote: SwapQuote) => void;
+    className?: string;
 }
 
 export declare interface ProviderInfo {
@@ -313,8 +367,20 @@ export declare class TradeApiClient {
     buildSwap(quote: SwapQuote, userPublicKey: string): Promise<SwapTransaction>;
     compareQuotes(inputMint: string, outputMint: string, amount: string): Promise<SwapQuote[]>;
     executeSwap(signedTransaction: string, provider: string, requestId?: string): Promise<ExecuteResult>;
+    simulateSwap(signedTransaction: string): Promise<{
+        success: boolean;
+        logs?: string[];
+        unitsConsumed?: number;
+        error?: unknown;
+    }>;
+    getSwapRoutes(): Promise<{
+        provider: string;
+        capabilities: ProviderInfo["capabilities"];
+        enabled: boolean;
+    }[]>;
     getProviders(): Promise<ProviderInfo[]>;
     getPrice(mint: string): Promise<PriceSnapshot>;
+    getPriceBySymbol(symbol: string): Promise<PriceSnapshot>;
     getBatchPrices(mints: string[]): Promise<{
         prices: PriceSnapshot[];
     }>;
@@ -432,7 +498,48 @@ export declare class TradeApiClient {
         limitOrders: OpenOrder[];
         dcaOrders: DcaOrder[];
     }>;
+    getMonitoredOrders(wallet: string): Promise<unknown[]>;
+    getExecutions(orderId: string): Promise<{
+        orderId: string;
+        timestamp: string;
+        txSignature: string;
+        fillPrice: string;
+        status: string;
+    }[]>;
     getPositions(wallet: string): Promise<PositionsResponse>;
+    getPnl(wallet: string): Promise<{
+        holdings: PnlHolding[];
+        totalValue: string;
+        totalCostBasis: string;
+        totalUnrealizedPnl: string;
+        dataSource: string;
+    }>;
+    getTradeHistory(wallet: string, mint?: string, limit?: number): Promise<{
+        trades: TradeHistoryEntry[];
+    }>;
+    getOrderbook(market: string): Promise<{
+        bids: unknown[];
+        asks: unknown[];
+        spread: number;
+        midPrice: number;
+    }>;
+    findMarkets(baseMint: string, quoteMint: string): Promise<{
+        address: string;
+        baseMint: string;
+        quoteMint: string;
+    }[]>;
+    placeManifestOrder(params: {
+        market: string;
+        maker: string;
+        isBid: boolean;
+        numBaseTokens: number;
+        tokenPrice: number;
+        orderType?: string;
+    }): Promise<{
+        transaction: string;
+        orderId: string;
+        needsSeatSetup: boolean;
+    }>;
     getPendingActions(wallet: string): Promise<PendingAction[]>;
     completeAction(actionId: string, signedTransaction: string): Promise<{
         actionId: string;
@@ -458,6 +565,27 @@ export declare class TradeApiError extends Error {
 declare interface TradeContextValue {
     api: TradeApiClient;
     config: CedrosTradeConfig;
+}
+
+export declare interface TradeHistoryEntry {
+    signature: string;
+    timestamp: string;
+    tradeType: string;
+    inputMint: string;
+    outputMint: string;
+    inputAmount: string;
+    outputAmount: string;
+    price: string;
+    source: string;
+}
+
+export declare function TradeHistoryTable({ walletAddress, mintFilter, limit, className }: TradeHistoryTableProps): JSX_2.Element;
+
+export declare interface TradeHistoryTableProps {
+    walletAddress: string;
+    mintFilter?: string;
+    limit?: number;
+    className?: string;
 }
 
 export declare function TradingPage({ walletAddress, inputMint, outputMint, inputSymbol, outputSymbol, tradingViewSymbol, chartType, manifestMarket, theme, onSign, onOrderSuccess, className, }: TradingPageProps): JSX_2.Element;

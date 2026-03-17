@@ -1,6 +1,6 @@
 import { jsxs as s, jsx as e } from "react/jsx-runtime";
 import { useState as u, useEffect as w, useCallback as S } from "react";
-import { T as A } from "./apiClient-uXbtq2G9.js";
+import { T as A } from "./apiClient-Chdwm2xl.js";
 function $({ pluginContext: a }) {
   const [c, l] = u(null), [d, m] = u(null);
   return w(() => {

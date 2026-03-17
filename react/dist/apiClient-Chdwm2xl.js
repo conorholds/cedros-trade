@@ -7,12 +7,12 @@ class p {
     const r = {
       "Content-Type": "application/json",
       ...e == null ? void 0 : e.headers
-    }, o = (n = this.tokenFn) == null ? void 0 : n.call(this);
-    o && (r.Authorization = `Bearer ${o}`), this.apiKey && (r["x-api-key"] = this.apiKey);
+    }, i = (n = this.tokenFn) == null ? void 0 : n.call(this);
+    i && (r.Authorization = `Bearer ${i}`), this.apiKey && (r["x-api-key"] = this.apiKey);
     const s = await fetch(`${this.baseUrl}${t}`, { ...e, headers: r });
     if (!s.ok) {
-      const i = await s.json().catch(() => ({ error: { message: s.statusText } }));
-      throw new h(s.status, ((a = i == null ? void 0 : i.error) == null ? void 0 : a.code) ?? "UNKNOWN", ((u = i == null ? void 0 : i.error) == null ? void 0 : u.message) ?? s.statusText);
+      const o = await s.json().catch(() => ({ error: { message: s.statusText } }));
+      throw new c(s.status, ((a = o == null ? void 0 : o.error) == null ? void 0 : a.code) ?? "UNKNOWN", ((u = o == null ? void 0 : o.error) == null ? void 0 : u.message) ?? s.statusText);
     }
     return s.json();
   }
@@ -46,12 +46,21 @@ class p {
   executeSwap(t, e, r) {
     return this.post("/swap/execute", { signedTransaction: t, provider: e, requestId: r });
   }
+  simulateSwap(t) {
+    return this.post("/swap/simulate", { signedTransaction: t });
+  }
+  getSwapRoutes() {
+    return this.get("/swap/routes");
+  }
   getProviders() {
     return this.get("/swap/providers");
   }
   // --- Prices ---
   getPrice(t) {
     return this.get(`/prices/${t}`);
+  }
+  getPriceBySymbol(t) {
+    return this.get(`/prices/by-symbol/${t}`);
   }
   getBatchPrices(t) {
     return this.post("/prices/batch", { mints: t });
@@ -95,9 +104,35 @@ class p {
   getOpenOrders(t) {
     return this.get(`/orders/wallet/${t}`);
   }
+  // --- Monitored orders ---
+  getMonitoredOrders(t) {
+    return this.get(`/orders/monitored/${t}`);
+  }
+  getExecutions(t) {
+    return this.get(`/orders/${t}/executions`);
+  }
   // --- Positions ---
   getPositions(t) {
     return this.get(`/positions/${t}`);
+  }
+  getPnl(t) {
+    return this.get(`/positions/${t}/pnl`);
+  }
+  getTradeHistory(t, e, r) {
+    const i = new URLSearchParams();
+    e && i.set("mint", e), r && i.set("limit", String(r));
+    const s = i.toString() ? `?${i}` : "";
+    return this.get(`/positions/${t}/history${s}`);
+  }
+  // --- Orderbook (Manifest) ---
+  getOrderbook(t) {
+    return this.get(`/orderbook/${t}`);
+  }
+  findMarkets(t, e) {
+    return this.get(`/orderbook/markets?base=${t}&quote=${e}`);
+  }
+  placeManifestOrder(t) {
+    return this.post("/orders/manifest", t);
   }
   // --- Action Queue ---
   getPendingActions(t) {
@@ -117,12 +152,12 @@ class p {
     return this.get("/health");
   }
 }
-class h extends Error {
+class c extends Error {
   constructor(t, e, r) {
     super(r), this.status = t, this.code = e, this.name = "TradeApiError";
   }
 }
 export {
   p as T,
-  h as a
+  c as a
 };
