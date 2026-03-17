@@ -220,7 +220,7 @@ export declare interface SlippageControlProps {
     className?: string;
 }
 
-export declare function SwapForm({ walletAddress, onSign, onSuccess, onError, defaultInputMint, defaultOutputMint, className, }: SwapFormProps): JSX_2.Element;
+export declare function SwapForm({ walletAddress, onSign, onSuccess, onError, defaultInputMint, defaultOutputMint, allowedInputMints, allowedOutputMints, className, }: SwapFormProps): JSX_2.Element;
 
 export declare interface SwapFormProps {
     /** User's wallet public key */
@@ -232,6 +232,10 @@ export declare interface SwapFormProps {
     onError?: (error: string) => void;
     defaultInputMint?: string;
     defaultOutputMint?: string;
+    /** Restrict which mints appear in the input token selector */
+    allowedInputMints?: string[];
+    /** Restrict which mints appear in the output token selector */
+    allowedOutputMints?: string[];
     className?: string;
 }
 
@@ -272,7 +276,7 @@ export declare interface TokenRecord {
     categories: string[];
 }
 
-export declare function TokenSelector({ isOpen, onClose, onSelect, excludeMints, className }: TokenSelectorProps): JSX_2.Element | null;
+export declare function TokenSelector({ isOpen, onClose, onSelect, excludeMints, allowedMints, className }: TokenSelectorProps): JSX_2.Element | null;
 
 export declare interface TokenSelectorProps {
     isOpen: boolean;
@@ -280,6 +284,8 @@ export declare interface TokenSelectorProps {
     onSelect: (token: TokenRecord) => void;
     /** Mints to exclude from the list (e.g. the other side of the pair) */
     excludeMints?: string[];
+    /** If set, only show these mints (allowlist) */
+    allowedMints?: string[];
     className?: string;
 }
 
@@ -371,6 +377,56 @@ export declare class TradeApiClient {
     }>;
     cancelOrder(orderId: string, maker: string): Promise<{
         transaction: string;
+    }>;
+    createTrailingStop(params: {
+        maker: string;
+        walletId?: string;
+        inputMint: string;
+        outputMint: string;
+        inAmount: string;
+        trailPercent: number;
+        slippageBps?: number;
+    }): Promise<{
+        orderId: string;
+        currentPrice: string;
+        initialTrigger: string;
+        status: string;
+    }>;
+    createOco(params: {
+        maker: string;
+        walletId?: string;
+        inputMint: string;
+        outputMint: string;
+        inAmount: string;
+        stopLoss: {
+            triggerPrice: string;
+            slippageBps: number;
+        };
+        takeProfit: {
+            triggerPrice: string;
+            slippageBps: number;
+        };
+    }): Promise<{
+        ocoId: string;
+        stopLossOrderId: string;
+        takeProfitOrderId: string;
+        status: string;
+        linked: boolean;
+        reason?: string;
+    }>;
+    createBracket(params: {
+        maker: string;
+        walletId?: string;
+        inputMint: string;
+        outputMint: string;
+        inAmount: string;
+        stopLossPercent: number;
+        takeProfitPercent: number;
+        trailingStop?: boolean;
+    }): Promise<{
+        bracketId: string;
+        entryTransaction: string;
+        status: string;
     }>;
     getOpenOrders(wallet: string): Promise<{
         limitOrders: OpenOrder[];
@@ -539,7 +595,7 @@ export declare interface UsePositionsReturn {
     refresh: () => Promise<void>;
 }
 
-export declare function usePrices(): UsePricesReturn;
+export declare function usePrices(useWebSocket?: boolean): UsePricesReturn;
 
 export declare interface UsePricesReturn {
     prices: Record<string, PriceSnapshot>;
@@ -548,6 +604,7 @@ export declare interface UsePricesReturn {
     getPrice: (mint: string) => Promise<PriceSnapshot>;
     subscribe: (mints: string[]) => void;
     unsubscribe: (mints: string[]) => void;
+    connectionState: WsState;
 }
 
 export declare function useSwap(): UseSwapReturn;
@@ -596,5 +653,7 @@ export declare interface UseTransferReturn {
     }>;
     reset: () => void;
 }
+
+declare type WsState = 'connecting' | 'connected' | 'disconnected' | 'reconnecting';
 
 export { }

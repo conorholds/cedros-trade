@@ -8,6 +8,7 @@ use crate::config::TradeConfig;
 use crate::embedded_wallet::EmbeddedWalletClient;
 use crate::error::TradeError;
 use crate::indexer::IndexerService;
+use crate::metaplex::MetaplexService;
 use crate::rate_limit::KeyRateLookup;
 use crate::monitor::PriceMonitor;
 use crate::orderbook::OrderbookService;
@@ -61,6 +62,7 @@ struct TradeServiceInner {
     dca_order_service: DcaOrderService,
     indexer_service: IndexerService,
     orderbook_service: OrderbookService,
+    metaplex_service: MetaplexService,
     storage: Arc<Storage>,
     embedded_wallet: Arc<EmbeddedWalletClient>,
     monitor: Option<Arc<PriceMonitor>>,
@@ -124,6 +126,9 @@ impl TradeService {
         let orderbook_service = OrderbookService::new(
             http_client.clone(), config.solana.rpc_url.clone(), config.manifest.clone(),
         );
+        let metaplex_service = MetaplexService::new(
+            http_client.clone(), config.solana.rpc_url.clone(),
+        );
         let storage = if config.database.url.is_empty() {
             tracing::warn!("DATABASE_URL not set — monitored orders will not persist across restarts");
             Arc::new(Storage::in_memory())
@@ -147,7 +152,7 @@ impl TradeService {
                 portfolio_service,
                 limit_order_service,
                 dca_order_service,
-                indexer_service, orderbook_service,
+                indexer_service, orderbook_service, metaplex_service,
                 storage: storage.clone(),
                 embedded_wallet: embedded_wallet.clone(),
                 monitor: None, // Initialized after service creation via start_monitor()
@@ -373,6 +378,23 @@ impl TradeService {
 
     pub fn indexer_service(&self) -> &IndexerService { &self.inner.indexer_service }
     pub fn orderbook_service(&self) -> &OrderbookService { &self.inner.orderbook_service }
+    pub fn metaplex_service(&self) -> &MetaplexService { &self.inner.metaplex_service }
+
+    /// Look up a token by mint — checks registry first, falls back to Metaplex on-chain metadata.
+    pub async fn token_by_mint_with_fallback(&self, mint: &str) -> Option<TokenRecord> {
+        // Check curated registry first
+        if let Some(t) = self.token_by_mint(mint).await { return Some(t); }
+        // Fall back to Metaplex on-chain metadata
+        if let Ok(Some(meta)) = self.inner.metaplex_service.get_metadata(mint).await {
+            return Some(TokenRecord {
+                mint: meta.mint, symbol: meta.symbol, name: meta.name,
+                decimals: 0, // Unknown from Metaplex — caller should fetch separately
+                logo_url: if meta.uri.is_empty() { None } else { Some(meta.uri) },
+                coingecko_id: None, tradingview_symbol: None, categories: vec![],
+            });
+        }
+        None
+    }
 
     pub fn storage(&self) -> &Storage {
         &self.inner.storage

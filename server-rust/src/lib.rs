@@ -6,6 +6,7 @@ pub mod error;
 pub mod execute;
 pub mod health;
 pub mod indexer;
+pub mod metaplex;
 pub mod metrics;
 pub mod monitor;
 pub mod orderbook;

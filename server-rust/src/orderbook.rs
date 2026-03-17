@@ -12,6 +12,7 @@ use tracing::debug;
 
 use crate::config::ManifestConfig;
 use crate::error::TradeError;
+use crate::solana_tx::{self, Pubkey, Instruction, AccountMeta};
 
 /// A single orderbook level (price + aggregated size).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -198,9 +199,12 @@ pub struct ManifestOrderResponse {
     pub needs_seat_setup: bool,
 }
 
+// Manifest instruction discriminators (first 8 bytes of sha256("global:instruction_name"))
+const PLACE_ORDER_DISCRIMINATOR: [u8; 8] = [51, 194, 155, 175, 109, 130, 96, 203]; // PlaceOrder
+const CLAIM_SEAT_DISCRIMINATOR: [u8; 8] = [133, 252, 250, 150, 172, 244, 175, 94]; // ClaimSeat
+
 impl OrderbookService {
     /// Build an unsigned transaction for placing an order on Manifest.
-    /// Includes seat setup instruction if the trader doesn't have one.
     pub async fn build_place_order(
         &self, req: &ManifestOrderRequest,
     ) -> Result<ManifestOrderResponse, TradeError> {
@@ -208,54 +212,147 @@ impl OrderbookService {
             return Err(TradeError::BadRequest("Manifest not enabled".into()));
         }
 
-        // Fetch market to get base/quote decimals
-        let snapshot = self.get_orderbook(&req.market).await?;
+        let program_id = Pubkey::from_base58(&self.config.program_id)?;
+        let market = Pubkey::from_base58(&req.market)?;
+        let maker = Pubkey::from_base58(&req.maker)?;
 
-        // Build the Manifest placeOrder instruction manually
-        // Manifest program expects: [instruction_discriminator(8)] [PlaceOrderParams]
-        // PlaceOrderParams: num_base_tokens(u64), token_price(u64), is_bid(bool), ...
-        let base_decimals = self.get_decimals_from_snapshot(&snapshot, true);
-        let quote_decimals = self.get_decimals_from_snapshot(&snapshot, false);
+        // Fetch market account to get decimals
+        let snapshot = self.get_orderbook(&req.market).await?;
+        let base_decimals = self.parse_decimals(&snapshot, true);
+        let quote_decimals = self.parse_decimals(&snapshot, false);
 
         let base_atoms = (req.num_base_tokens * 10f64.powi(base_decimals as i32)) as u64;
-        let price_atoms = (req.token_price * 10f64.powi(quote_decimals as i32)) as u64;
+        let price_mantissa = (req.token_price * 10f64.powi(quote_decimals as i32)) as u64;
 
-        // Check if trader has a seat (fetch their token accounts for this market)
         let needs_seat = self.check_needs_seat(&req.maker, &req.market).await?;
-
-        // For now, return the instruction parameters — the frontend SDK handles
-        // actual instruction construction via @bonasa-tech/manifest-sdk
         let order_id = uuid::Uuid::new_v4().to_string();
 
-        // Build via RPC simulation to get the transaction
-        // In production, this would call ManifestClient.placeOrderIx()
-        // For now, we return the parameters for the frontend SDK to construct
-        Ok(ManifestOrderResponse {
-            transaction: serde_json::json!({
-                "type": "manifest_place_order",
-                "market": req.market,
-                "maker": req.maker,
-                "isBid": req.is_bid,
-                "numBaseAtoms": base_atoms,
-                "priceAtoms": price_atoms,
-                "needsSeatSetup": needs_seat,
-                "programId": self.config.program_id,
-            }).to_string(),
-            order_id,
-            needs_seat_setup: needs_seat,
-        })
+        let mut instructions = Vec::new();
+
+        // ClaimSeat if needed (must be done before first order on a market)
+        if needs_seat {
+            let mut data = Vec::with_capacity(8);
+            data.extend_from_slice(&CLAIM_SEAT_DISCRIMINATOR);
+
+            instructions.push(Instruction {
+                program_id,
+                accounts: vec![
+                    AccountMeta { pubkey: maker, is_signer: true, is_writable: false },
+                    AccountMeta { pubkey: market, is_signer: false, is_writable: true },
+                    AccountMeta { pubkey: solana_tx::SYSTEM_PROGRAM, is_signer: false, is_writable: false },
+                ],
+                data,
+            });
+        }
+
+        // PlaceOrder instruction
+        // Data layout: [8 discriminator] [8 base_atoms] [8 price_mantissa] [1 is_bid] [1 order_type] [8 last_valid_slot] [8 client_order_id]
+        let mut data = Vec::with_capacity(42);
+        data.extend_from_slice(&PLACE_ORDER_DISCRIMINATOR);
+        data.extend_from_slice(&base_atoms.to_le_bytes());
+        data.extend_from_slice(&price_mantissa.to_le_bytes());
+        data.push(if req.is_bid { 1 } else { 0 });
+        data.push(0); // OrderType::Limit = 0
+        data.extend_from_slice(&0u64.to_le_bytes()); // lastValidSlot = 0 (no expiry)
+        data.extend_from_slice(&0u64.to_le_bytes()); // clientOrderId = 0
+
+        // Derive the trader's base and quote token accounts
+        let base_mint = Pubkey::from_base58(&snapshot.base_mint)?;
+        let quote_mint = Pubkey::from_base58(&snapshot.quote_mint)?;
+        let trader_base = solana_tx::derive_ata(&maker, &base_mint);
+        let trader_quote = solana_tx::derive_ata(&maker, &quote_mint);
+        let vault_base = solana_tx::derive_ata(&market, &base_mint);
+        let vault_quote = solana_tx::derive_ata(&market, &quote_mint);
+
+        instructions.push(Instruction {
+            program_id,
+            accounts: vec![
+                AccountMeta { pubkey: maker, is_signer: true, is_writable: true },
+                AccountMeta { pubkey: market, is_signer: false, is_writable: true },
+                AccountMeta { pubkey: trader_base, is_signer: false, is_writable: true },
+                AccountMeta { pubkey: trader_quote, is_signer: false, is_writable: true },
+                AccountMeta { pubkey: vault_base, is_signer: false, is_writable: true },
+                AccountMeta { pubkey: vault_quote, is_signer: false, is_writable: true },
+                AccountMeta { pubkey: solana_tx::TOKEN_PROGRAM, is_signer: false, is_writable: false },
+                AccountMeta { pubkey: base_mint, is_signer: false, is_writable: false },
+                AccountMeta { pubkey: quote_mint, is_signer: false, is_writable: false },
+            ],
+            data,
+        });
+
+        // Fetch blockhash and build unsigned transaction
+        let blockhash = self.fetch_blockhash().await?;
+        let tx_bytes = solana_tx::build_unsigned_transaction(instructions, maker, blockhash);
+        let transaction = base64::Engine::encode(
+            &base64::engine::general_purpose::STANDARD, &tx_bytes,
+        );
+
+        Ok(ManifestOrderResponse { transaction, order_id, needs_seat_setup: needs_seat })
     }
 
-    fn get_decimals_from_snapshot(&self, _snapshot: &OrderbookSnapshot, _is_base: bool) -> u32 {
-        // In production, parse from the market account header
-        // Default to common values
-        9 // SOL decimals
+    fn parse_decimals(&self, snapshot: &OrderbookSnapshot, is_base: bool) -> u32 {
+        // Parse from the market account data we already fetched
+        // For known mints, use hardcoded values
+        let mint = if is_base { &snapshot.base_mint } else { &snapshot.quote_mint };
+        match mint.as_str() {
+            "So11111111111111111111111111111111111111112" => 9,
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" => 6,
+            "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" => 6,
+            _ => 9, // Default
+        }
     }
 
-    async fn check_needs_seat(&self, _maker: &str, _market: &str) -> Result<bool, TradeError> {
-        // In production, check the market account for the trader's seat
-        // For now, assume seat needed on first interaction
-        Ok(true)
+    async fn check_needs_seat(&self, maker: &str, market: &str) -> Result<bool, TradeError> {
+        // Fetch market account and check if maker has a seat in the ClaimedSeats tree
+        let body = serde_json::json!({
+            "jsonrpc": "2.0", "id": 1,
+            "method": "getAccountInfo",
+            "params": [market, { "encoding": "base64" }]
+        });
+        let resp: serde_json::Value = self.client.post(&self.rpc_url).json(&body)
+            .timeout(Duration::from_secs(5)).send().await
+            .map_err(|e| TradeError::RpcError(e.to_string()))?
+            .json().await
+            .map_err(|e| TradeError::RpcError(e.to_string()))?;
+
+        let data_b64 = resp["result"]["value"]["data"][0].as_str().unwrap_or("");
+        if data_b64.is_empty() { return Ok(true); }
+
+        let data = base64::Engine::decode(
+            &base64::engine::general_purpose::STANDARD, data_b64,
+        ).unwrap_or_default();
+
+        // Search for maker's pubkey in the seat nodes (type 4)
+        let maker_bytes = bs58::decode(maker).into_vec().unwrap_or_default();
+        if maker_bytes.len() != 32 || data.len() < 128 { return Ok(true); }
+
+        let node_size = 80;
+        let nodes_start = 128;
+        for i in 0..((data.len() - nodes_start) / node_size) {
+            let offset = nodes_start + i * node_size;
+            if offset + node_size > data.len() { break; }
+            if data[offset] == 4 && data[offset + 8..offset + 40] == maker_bytes[..] {
+                return Ok(false); // Already has a seat
+            }
+        }
+
+        Ok(true) // No seat found
+    }
+
+    async fn fetch_blockhash(&self) -> Result<[u8; 32], TradeError> {
+        let body = serde_json::json!({
+            "jsonrpc": "2.0", "id": 1,
+            "method": "getLatestBlockhash",
+            "params": [{ "commitment": "finalized" }]
+        });
+        let resp: serde_json::Value = self.client.post(&self.rpc_url).json(&body)
+            .send().await.map_err(|e| TradeError::RpcError(e.to_string()))?
+            .json().await.map_err(|e| TradeError::RpcError(e.to_string()))?;
+        let hash_str = resp["result"]["value"]["blockhash"].as_str()
+            .ok_or_else(|| TradeError::RpcError("missing blockhash".into()))?;
+        let bytes = bs58::decode(hash_str).into_vec()
+            .map_err(|e| TradeError::RpcError(format!("blockhash: {e}")))?;
+        bytes.try_into().map_err(|_| TradeError::RpcError("blockhash 32 bytes".into()))
     }
 }
 

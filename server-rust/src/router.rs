@@ -141,7 +141,7 @@ async fn get_token(
     Path(mint): Path<String>,
 ) -> Result<Json<TokenRecord>, TradeError> {
     let token = service
-        .token_by_mint(&mint).await
+        .token_by_mint_with_fallback(&mint).await
         .ok_or_else(|| TradeError::TokenNotFound(mint))?;
     Ok(Json(token))
 }

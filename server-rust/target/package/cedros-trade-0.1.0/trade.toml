@@ -1,0 +1,53 @@
+[server]
+host = "0.0.0.0"
+port = 8080
+cors_origins = ["*"]
+
+[solana]
+rpc_url = "https://api.mainnet-beta.solana.com"
+network = "mainnet-beta"
+
+[swap]
+default_slippage_bps = 30
+enabled_providers = ["jupiter"]
+
+[swap.jupiter]
+api_url = "https://api.jup.ag/swap/v1"
+quote_cache_ttl_secs = 5
+max_requests_per_sec = 10
+
+[swap.ultra]
+api_url = "https://api.jup.ag/ultra/v1"
+fee_bps = 0
+
+[swap.dflow]
+api_url = "https://quote-api.dflow.net"
+api_key = ""  # set via DFLOW_API_KEY env var
+fallback_to_jupiter = true
+
+[coingecko]
+api_url = "https://api.coingecko.com/api/v3"
+price_cache_ttl_secs = 30
+api_key = ""
+
+[tokens]
+source = "embedded"
+file_path = ""
+url = ""
+refresh_interval_secs = 3600
+
+[database]
+url = ""  # set via DATABASE_URL env var (same as cedros-login and cedros-pay)
+
+[embedded_wallet]
+enabled = false
+cedros_login_url = ""           # cedros-login service URL
+service_token = ""              # set via EMBEDDED_WALLET_SERVICE_TOKEN env var
+signing_timeout_ms = 5000
+
+[indexer]
+enabled = false
+provider = "helius"  # "helius", "triton", or "shyft"
+api_key = ""         # set via INDEXER_API_KEY env var
+api_url = "https://api.helius.xyz"
+cache_ttl_secs = 300
