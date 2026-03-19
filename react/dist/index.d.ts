@@ -30,11 +30,25 @@ export declare interface CedrosTradeConfig {
     chartType?: 'tradingview' | 'lightweight';
 }
 
-export declare function CedrosTradeProvider({ config, children }: CedrosTradeProviderProps): JSX_2.Element;
+export declare function CedrosTradeProvider({ config, children, theme: themeMode, themeOverrides, unstyled, }: CedrosTradeProviderProps): JSX_2.Element;
 
 export declare interface CedrosTradeProviderProps {
     config: CedrosTradeConfig;
     children: default_2.ReactNode;
+    /** Theme mode. Same prop name as cedros-login. Default: 'dark'. */
+    theme?: ThemeMode;
+    /**
+     * Override CSS variable tokens. Same ThemeOverrides interface as cedros-login —
+     * pass the same object to both providers and they'll both respect it.
+     *
+     * @example
+     * const overrides = { '--cedros-background': '#292524', '--cedros-foreground': '#f5f5f4' };
+     * <CedrosLoginProvider config={...} themeOverrides={overrides}>
+     *   <CedrosTradeProvider config={...} themeOverrides={overrides}>
+     */
+    themeOverrides?: ThemeOverrides;
+    /** Disable all default styles. Same prop as cedros-login's `unstyled`. */
+    unstyled?: boolean;
 }
 
 export declare function ChartContainer({ chartType, symbol, theme, chartData, className }: ChartContainerProps): JSX_2.Element;
@@ -319,6 +333,30 @@ export declare interface SwapTransaction {
     requestId?: string;
 }
 
+export declare type ThemeMode = 'light' | 'dark' | 'auto';
+
+/**
+ * Theme overrides — same interface as cedros-login's ThemeOverrides.
+ * Uses CSS custom property names as keys so one set of overrides works across all Cedros packages.
+ * Additional trade-specific tokens (--ct-*) are accepted via the index signature.
+ */
+export declare interface ThemeOverrides {
+    '--cedros-primary'?: string;
+    '--cedros-primary-foreground'?: string;
+    '--cedros-background'?: string;
+    '--cedros-foreground'?: string;
+    '--cedros-muted'?: string;
+    '--cedros-muted-foreground'?: string;
+    '--cedros-border'?: string;
+    '--cedros-input'?: string;
+    '--cedros-ring'?: string;
+    '--cedros-radius'?: string;
+    '--cedros-destructive'?: string;
+    '--cedros-destructive-foreground'?: string;
+    /** Additional custom properties (e.g. --ct-buy, --ct-sell) */
+    [key: string]: string | undefined;
+}
+
 export declare interface TokenRecord {
     mint: string;
     symbol: string;
@@ -565,6 +603,7 @@ export declare class TradeApiError extends Error {
 declare interface TradeContextValue {
     api: TradeApiClient;
     config: CedrosTradeConfig;
+    theme: UseThemeReturn;
 }
 
 export declare interface TradeHistoryEntry {
@@ -649,6 +688,9 @@ export declare interface UseActionQueueReturn {
     complete: (actionId: string, signedTransaction: string) => Promise<void>;
     dismiss: (actionId: string) => Promise<void>;
 }
+
+/** Expose theme state. Same pattern as cedros-login's useThemeManager(). */
+export declare function useCedrosTradeTheme(): UseThemeReturn;
 
 export declare function useLimitOrder(): UseLimitOrderReturn;
 
@@ -748,6 +790,16 @@ export declare interface UseSwapReturn {
     execute: (signedTransaction: string, provider: string, requestId?: string) => Promise<ExecuteResult>;
     compareProviders: (inputMint: string, outputMint: string, amount: string) => Promise<SwapQuote[]>;
     reset: () => void;
+}
+
+export declare function useTheme(initialMode?: ThemeMode, overrides?: ThemeOverrides): UseThemeReturn;
+
+export declare interface UseThemeReturn {
+    mode: ThemeMode;
+    setMode: (mode: ThemeMode) => void;
+    isDark: boolean;
+    className: string;
+    style: React.CSSProperties;
 }
 
 export declare function useTokens(): UseTokensReturn;
